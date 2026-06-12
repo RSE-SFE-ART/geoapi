@@ -7,15 +7,37 @@ import json
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import fromstr
-from rest_framework import status
+from rest_framework import request, status
 
 from .models import AnagraficaPozzi, Stratigrafia
 from .serializers import AnagraficaPozziSerializer, StratigrafiaSerializer
+from .schema import (
+    pozzi_list_schema,
+    pozzi_retrieve_schema,
+    stratigrafia_by_pozzo_schema,
+    nearest_pozzi_schema,
+    pozzi_in_geometry_schema,
+)
+
+from .serializers import (
+    AnagraficaPozziSerializer,
+    StratigrafiaSerializer,
+    NearestPozziRequestSerializer,
+    PozziInGeometryRequestSerializer,
+)
 
 
 class PozziViewSet(ReadOnlyModelViewSet):
     serializer_class = AnagraficaPozziSerializer
     lookup_field = "id_pozzo"
+
+    @pozzi_list_schema
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @pozzi_retrieve_schema
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = AnagraficaPozzi.objects.using("dbeta").all()
@@ -31,6 +53,7 @@ class PozziViewSet(ReadOnlyModelViewSet):
 
         return queryset
     
+@stratigrafia_by_pozzo_schema
 @api_view(["GET"])
 def get_stratigrafia_by_pozzo(request, id_pozzo):
     pozzo_exists = (
@@ -73,38 +96,15 @@ def get_stratigrafia_by_pozzo(request, id_pozzo):
         }
     )
 
+@nearest_pozzi_schema
 @api_view(["POST"])
 def get_nearest_pozzi(request):
-    srid = request.data.get("srid")
-    geometry = request.data.get("geometry")
-    n = request.data.get("n", 1)
+    request_serializer = NearestPozziRequestSerializer(data=request.data)
+    request_serializer.is_valid(raise_exception=True)
 
-    if srid is None:
-        return Response(
-            {"detail": "Missing required field: srid."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if geometry is None:
-        return Response(
-            {"detail": "Missing required field: geometry."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        srid = int(srid)
-        n = int(n)
-    except ValueError:
-        return Response(
-            {"detail": "srid and n must be integers."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if n < 1:
-        return Response(
-            {"detail": "n must be greater than or equal to 1."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    srid = request_serializer.validated_data["srid"]
+    geometry = request_serializer.validated_data["geometry"]
+    n = request_serializer.validated_data["n"]
 
     try:
         input_geom = fromstr(json.dumps(geometry))
@@ -143,7 +143,6 @@ def get_nearest_pozzi(request):
         item["distance_m"] = obj.distance.m
         results.append(item)
 
-
     return Response(
         {
             "query": {
@@ -152,35 +151,18 @@ def get_nearest_pozzi(request):
                 "n": n,
             },
             "target_srid": 32632,
-            "count": len(serializer.data),
+            "count": len(results),
             "results": results,
         }
     )
-
+@pozzi_in_geometry_schema
 @api_view(["POST"])
 def get_pozzi_in_geometry(request):
-    srid = request.data.get("srid")
-    geometry = request.data.get("geometry")
+    request_serializer = PozziInGeometryRequestSerializer(data=request.data)
+    request_serializer.is_valid(raise_exception=True)
 
-    if srid is None:
-        return Response(
-            {"detail": "Missing required field: srid."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if geometry is None:
-        return Response(
-            {"detail": "Missing required field: geometry."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        srid = int(srid)
-    except ValueError:
-        return Response(
-            {"detail": "srid must be an integer."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    srid = request_serializer.validated_data["srid"]
+    geometry = request_serializer.validated_data["geometry"]
 
     try:
         input_geom = fromstr(json.dumps(geometry))

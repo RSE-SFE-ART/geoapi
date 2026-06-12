@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.gis',
     'rest_framework',
+    'drf_spectacular',
     'sources.idrogeno.apps.IdrogenoConfig'
 ]
 
@@ -149,3 +150,13 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "GeoAPI",
+    "DESCRIPTION": "Geospatial API for hydrogen-related datasets.",
+    "VERSION": "0.1.0",
+}
